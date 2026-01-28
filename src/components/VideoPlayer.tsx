@@ -72,7 +72,7 @@ export const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
           ref={ref}
           className="w-full h-full object-contain bg-black"
           playsInline
-          autoPlay={true}
+          autoPlay
           muted={true}
           onLoadedMetadata={handleLoadedMetadata}
           onPlay={onPlay}
