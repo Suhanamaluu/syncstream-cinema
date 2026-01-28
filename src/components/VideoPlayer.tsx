@@ -32,23 +32,35 @@ export const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
     const [hasVideo, setHasVideo] = useState(false);
 
     useEffect(() => {
-      const videoEl = (ref as React.RefObject<HTMLVideoElement>)?.current;
-      if (!videoEl) return;
+  const video = ref.current;
+  if (!video) return;
 
-      if (remoteStream && !isHost) {
-        videoEl.srcObject = remoteStream;
-        setHasVideo(true);
-      } else if (src && isHost) {
-        videoEl.srcObject = null;
-        videoEl.src = src;
-        setHasVideo(true);
-      }
-    }, [src, remoteStream, isHost, ref]);
+  const handlePlay = () => {
+    if (applyingRemoteRef.current) return;
+    sendSync("play", video.currentTime);
+  };
 
-    const handleLoadedMetadata = () => {
-      onVideoLoad?.();
-      setHasVideo(true);
-    };
+  const handlePause = () => {
+    if (applyingRemoteRef.current) return;
+    sendSync("pause", video.currentTime);
+  };
+
+  const handleSeeked = () => {
+    if (applyingRemoteRef.current) return;
+    sendSync("seek", video.currentTime);
+  };
+
+  video.addEventListener("play", handlePlay);
+  video.addEventListener("pause", handlePause);
+  video.addEventListener("seeked", handleSeeked);
+
+  return () => {
+    video.removeEventListener("play", handlePlay);
+    video.removeEventListener("pause", handlePause);
+    video.removeEventListener("seeked", handleSeeked);
+  };
+}, []);
+
 
     return (
       <div 
