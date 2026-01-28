@@ -68,17 +68,18 @@ export const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
             </p>
           </div>
         )}
-        
-        <video
+         <video
           ref={ref}
           className="w-full h-full object-contain bg-black"
           playsInline
+          autoPlay={true}
           muted={true}
           onLoadedMetadata={handleLoadedMetadata}
           onPlay={onPlay}
           onPause={onPause}
           onSeeked={onSeek}
         />
+       
         
         <VideoControls
           videoRef={ref as React.RefObject<HTMLVideoElement>}
