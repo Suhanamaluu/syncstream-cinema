@@ -1,8 +1,8 @@
-import { forwardRef, useEffect, useState } from 'react';
-import { VideoControls } from './VideoControls';
-import { PlaybackState } from '@/types/room';
-import { cn } from '@/lib/utils';
-import { Film } from 'lucide-react';
+import { forwardRef, useEffect, useRef, useState } from "react";
+import { VideoControls } from "./VideoControls";
+import { PlaybackState } from "@/types/room";
+import { cn } from "@/lib/utils";
+import { Film } from "lucide-react";
 
 interface VideoPlayerProps {
   src?: string;
@@ -17,53 +17,104 @@ interface VideoPlayerProps {
 }
 
 export const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
-  ({ 
-    src, 
-    isHost, 
-    playbackState, 
-    onPlay, 
-    onPause, 
-    onSeek,
-    onVideoLoad,
-    remoteStream,
-    controlsDisabled = false 
-  }, ref) => {
+  (
+    {
+      src,
+      isHost,
+      playbackState,
+      onPlay,
+      onPause,
+      onSeek,
+      onVideoLoad,
+      remoteStream,
+      controlsDisabled = false
+    },
+    ref
+  ) => {
     const [isHovering, setIsHovering] = useState(false);
     const [hasVideo, setHasVideo] = useState(false);
 
+    // 🔐 prevents sync loops
+    const applyingRemoteRef = useRef(false);
+
+    /* ================================
+       Attach MediaStream (VIEWER SIDE)
+    ================================= */
     useEffect(() => {
-  const video = ref.current;
-  if (!video) return;
+      const video = ref.current;
+      if (!video || !remoteStream) return;
 
-  const handlePlay = () => {
-    if (applyingRemoteRef.current) return;
-    sendSync("play", video.currentTime);
-  };
+      if (!video.srcObject) {
+        video.srcObject = remoteStream;
+        setHasVideo(true);
+      }
+    }, [remoteStream, ref]);
 
-  const handlePause = () => {
-    if (applyingRemoteRef.current) return;
-    sendSync("pause", video.currentTime);
-  };
+    /* ================================
+       LOCAL USER EVENTS → SEND SYNC
+    ================================= */
+    useEffect(() => {
+      const video = ref.current;
+      if (!video) return;
 
-  const handleSeeked = () => {
-    if (applyingRemoteRef.current) return;
-    sendSync("seek", video.currentTime);
-  };
+      const handlePlay = () => {
+        if (applyingRemoteRef.current) return;
+        onPlay();
+      };
 
-  video.addEventListener("play", handlePlay);
-  video.addEventListener("pause", handlePause);
-  video.addEventListener("seeked", handleSeeked);
+      const handlePause = () => {
+        if (applyingRemoteRef.current) return;
+        onPause();
+      };
 
-  return () => {
-    video.removeEventListener("play", handlePlay);
-    video.removeEventListener("pause", handlePause);
-    video.removeEventListener("seeked", handleSeeked);
-  };
-}, []);
+      const handleSeeked = () => {
+        if (applyingRemoteRef.current) return;
+        onSeek();
+      };
 
+      video.addEventListener("play", handlePlay);
+      video.addEventListener("pause", handlePause);
+      video.addEventListener("seeked", handleSeeked);
+
+      return () => {
+        video.removeEventListener("play", handlePlay);
+        video.removeEventListener("pause", handlePause);
+        video.removeEventListener("seeked", handleSeeked);
+      };
+    }, [onPlay, onPause, onSeek, ref]);
+
+    /* ================================
+       REMOTE SYNC → APPLY SAFELY
+    ================================= */
+    useEffect(() => {
+      const video = ref.current;
+      if (!video) return;
+
+      applyingRemoteRef.current = true;
+
+      if (Math.abs(video.currentTime - playbackState.time) > 0.5) {
+        video.currentTime = playbackState.time;
+      }
+
+      if (playbackState.isPlaying) {
+        if (video.paused) {
+          video.play().catch(() => {});
+        }
+      } else {
+        if (!video.paused) {
+          video.pause();
+        }
+      }
+
+      const t = setTimeout(() => {
+        applyingRemoteRef.current = false;
+      }, 150);
+
+      return () => clearTimeout(t);
+    }, [playbackState, ref]);
 
     return (
-      <div 
+      <div
         className={cn(
           "video-container relative w-full aspect-video bg-surface rounded-2xl overflow-hidden",
           "transition-all duration-300",
@@ -76,23 +127,25 @@ export const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface z-10">
             <Film className="w-16 h-16 text-muted-foreground mb-4" />
             <p className="text-muted-foreground text-lg">
-              {isHost ? 'Select a video file to start' : 'Waiting for host to share video...'}
+              {isHost
+                ? "Select a video file to start"
+                : "Waiting for host to share video..."}
             </p>
           </div>
         )}
-         <video
+
+        <video
           ref={ref}
           className="w-full h-full object-contain bg-black"
-          playsInline
           autoPlay
-          muted={true}
-          onLoadedMetadata={handleLoadedMetadata}
-          onPlay={onPlay}
-          onPause={onPause}
-          onSeeked={onSeek}
+          muted
+          playsInline
+          onLoadedMetadata={() => {
+            setHasVideo(true);
+            onVideoLoad?.();
+          }}
         />
-       
-        
+
         <VideoControls
           videoRef={ref as React.RefObject<HTMLVideoElement>}
           playbackState={playbackState}
@@ -106,4 +159,4 @@ export const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
   }
 );
 
-VideoPlayer.displayName = 'VideoPlayer';
+VideoPlayer.displayName = "VideoPlayer";
